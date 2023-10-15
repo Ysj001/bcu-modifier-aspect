@@ -10,7 +10,7 @@ private val hasPlugin = File(rootDir, "gradle.properties")
     .let { File(File(rootDir, "repos"), it) }
     .takeIf { it.isDirectory }
     ?.list()
-    ?.filter { it == "modifier-aspect" || it == "modifier-aspect-api"}
+    ?.filter { it == "modifier-aspect"}
     .isNullOrEmpty()
     .not()
 

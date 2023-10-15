@@ -5,23 +5,12 @@ plugins {
 }
 
 bytecodeUtil {
-    loggerLevel = 0
+    loggerLevel = 1
     modifiers = arrayOf(
         com.ysj.lib.bcu.modifier.aspect.AspectModifier::class.java,
     )
     notNeed = { entryName ->
-//        false
-        entryName.startsWith("kotlin/")
-            || entryName.startsWith("kotlinx/")
-            || entryName.startsWith("javax/")
-            || entryName.startsWith("org/intellij/")
-            || entryName.startsWith("org/jetbrains/")
-            || entryName.startsWith("org/junit/")
-            || entryName.startsWith("org/hamcrest/")
-            || entryName.startsWith("com/squareup/")
-            || entryName.startsWith("android")
-            || entryName.startsWith("com/google/android/")
-            || entryName.startsWith("okhttp")
+        !entryName.startsWith("com/ysj/") && !entryName.startsWith("com/example/")
     }
 }
 
