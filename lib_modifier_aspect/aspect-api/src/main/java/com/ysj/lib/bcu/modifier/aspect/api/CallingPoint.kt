@@ -85,7 +85,7 @@ class CallingPoint(
     /**
      * 调用代理的方法
      */
-    fun call() = method.invoke(if (isStatic) null else caller, *args)
+    fun call(vararg arg: Any? = this.args) = method.invoke(if (isStatic) null else caller, *arg)
 
     /**
      * 调用多级代理嵌套时的最终代理目标的方法
