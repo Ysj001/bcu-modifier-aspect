@@ -24,7 +24,11 @@ dependencies {
     val hasPlugin = groupId
         .replace(".", File.separator)
         .let { File(reposDir, it) }
-        .run { isDirectory && !list().isNullOrEmpty() }
+        .takeIf { it.isDirectory }
+        ?.list()
+        ?.filter { it == "modifier-aspect" || it == "modifier-aspect-api"}
+        .isNullOrEmpty()
+        .not()
     if (hasPlugin) {
         implementation("$groupId:modifier-aspect:$modifierAspectVersion")
     }

@@ -8,7 +8,11 @@ private val hasPlugin = File(rootDir, "gradle.properties")
     .getProperty("bcu.groupId")
     .replace(".", File.separator)
     .let { File(File(rootDir, "repos"), it) }
-    .run { isDirectory && !list().isNullOrEmpty() }
+    .takeIf { it.isDirectory }
+    ?.list()
+    ?.filter { it == "modifier-aspect" || it == "modifier-aspect-api"}
+    .isNullOrEmpty()
+    .not()
 
 if (hasPlugin) {
     // Demo
