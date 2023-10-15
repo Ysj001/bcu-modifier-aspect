@@ -7,6 +7,7 @@ private val reposDir = File(rootDir, "../repos")
 repositories {
     maven { url = reposDir.toURI() }
     maven { setUrl("https://maven.aliyun.com/nexus/content/groups/public/") }
+    maven { setUrl("https://jitpack.io") }
     google()
     gradlePluginPortal()
     mavenCentral()
@@ -15,7 +16,6 @@ repositories {
 dependencies {
     implementation(gradleKotlinDsl())
     implementation("com.android.tools.build:gradle-api:8.1.1")
-    implementation("io.github.ysj001.bcu:plugin:2.0.1")
     val properties = org.jetbrains.kotlin
         .konan.properties
         .loadProperties(File(rootDir, "../gradle.properties").absolutePath)
@@ -32,4 +32,5 @@ dependencies {
     if (hasPlugin) {
         implementation("$groupId:modifier-aspect:$modifierAspectVersion")
     }
+    implementation(properties["bcu.plugin"] as String)
 }
