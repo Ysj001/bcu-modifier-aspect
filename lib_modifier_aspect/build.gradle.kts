@@ -13,7 +13,7 @@ java {
 
 dependencies {
     implementation(project("aspect-api"))
-    implementation(project(":lib_bcu_plugin:plugin-api"))
+    implementation("io.github.ysj001.bcu:plugin-api:2.0.1")
 }
 
 mavenPublish()

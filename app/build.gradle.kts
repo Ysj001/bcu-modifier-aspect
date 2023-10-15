@@ -7,7 +7,7 @@ plugins {
 bytecodeUtil {
     loggerLevel = 0
     modifiers = arrayOf(
-        Class.forName("com.ysj.lib.bcu.modifier.aspect.AspectModifier"),
+        com.ysj.lib.bcu.modifier.aspect.AspectModifier::class.java,
     )
     notNeed = { entryName ->
 //        false
@@ -30,7 +30,7 @@ android {
     compileSdk = 33
 
     defaultConfig {
-        applicationId = "com.ysj.demo,aspect"
+        applicationId = "com.ysj.demo.aspect"
         minSdk = 21
         targetSdk = 33
         versionCode = 1
@@ -81,6 +81,5 @@ dependencies {
 //    implementation("com.squareup.okhttp3:okhttp:4.9.2")
 
     implementation(project(":lib_modifier_aspect:aspect-api"))
-    implementation(project(":lib_modifier_component_di:component-di-api"))
 
 }
