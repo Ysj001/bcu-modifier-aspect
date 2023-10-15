@@ -25,11 +25,38 @@ class MainActivity : AppCompatActivity() {
         vb.btnClickInterval.setOnClickListener {
             testClickInterval()
         }
+        vb.btnAopDemo.setOnClickListener {
+            onAopDemoClicked()
+        }
     }
 
     @ClickInterval
     private fun testClickInterval() {
         Log.i(TAG, "testClickInterval")
+    }
+
+    private fun onAopDemoClicked() {
+        test1()
+        test2(12)
+        test2("hello world")
+        Log.i(TAG, "onAopDemoClicked: ${test3(1, 2)}")
+    }
+
+    private fun test1() {
+        Log.i(TAG, "test1.")
+    }
+
+    private fun test2(str: String) {
+        Log.i(TAG, "test2: $str")
+    }
+
+
+    private fun test2(num: Int) {
+        Log.i(TAG, "test2: $num")
+    }
+
+    private fun test3(a: Int, b: Int): Int {
+        return a + b
     }
 
 }
