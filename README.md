@@ -42,7 +42,7 @@
            // BCU 插件依赖
            classpath("com.github.Ysj001.BytecodeUtil:plugin:<lastest-version>")
            // modifier-aspect 依赖
-           classpath("com.github.Ysj001:bcu-modifier-aspect:<lastest-version>")
+           classpath("com.github.Ysj001.bcu-modifier-aspect:modifier-aspect:<lastest-version>")
        }
    }
    
@@ -78,7 +78,7 @@
    
    dependencies {
        // 依赖 modifier-aspect-api
-       implementation("com.github.Ysj001:bcu-modifier-aspect-api:<lastest-version>")
+       implementation("com.github.Ysj001.bcu-modifier-aspect:modifier-aspect-api:<lastest-version>")
    }
    ```
 
