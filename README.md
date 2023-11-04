@@ -65,12 +65,14 @@
    
    // 配置 bcu 插件
    bytecodeUtil {
-       loggerLevel = 1
-       modifiers = arrayOf(
-           // 使用 modifier-aspect 的 Modifier 实现
-           Class.forName("com.ysj.lib.bcu.modifier.aspect.AspectModifier"),
-       )
-       notNeed = { entryName ->
+       config { variant ->
+           loggerLevel = 2
+           modifiers = arrayOf(
+           	// 使用 modifier-aspect 的 Modifier 实现
+           	Class.forName("com.ysj.lib.bcu.modifier.aspect.AspectModifier"),
+           )
+       }
+       filterNot { variant, entryName ->
            // 请按需配置过滤，可大幅提升编译输速度
            false
        }
