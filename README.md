@@ -64,7 +64,7 @@
    }
    
    // 配置 bcu 插件
-   bytecodeUtil {
+   bcu {
        config { variant ->
            loggerLevel = 2
            modifiers = arrayOf(
