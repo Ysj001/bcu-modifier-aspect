@@ -4,12 +4,14 @@ plugins {
     id("bcu-plugin")
 }
 
-bytecodeUtil {
-    loggerLevel = 1
-    modifiers = arrayOf(
-        com.ysj.lib.bcu.modifier.aspect.AspectModifier::class.java,
-    )
-    notNeed = { entryName ->
+bcu {
+    config { variant ->
+        loggerLevel = 2
+        modifiers = arrayOf(
+            com.ysj.lib.bcu.modifier.aspect.AspectModifier::class.java,
+        )
+    }
+    filterNot { variant, entryName ->
         !entryName.startsWith("com/ysj/") && !entryName.startsWith("com/example/")
     }
 }
