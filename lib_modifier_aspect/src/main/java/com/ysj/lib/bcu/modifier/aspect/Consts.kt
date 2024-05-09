@@ -5,6 +5,8 @@ import com.ysj.lib.bcu.modifier.aspect.api.CallingPoint
 import com.ysj.lib.bcu.modifier.aspect.api.JoinPoint
 import com.ysj.lib.bcu.modifier.aspect.api.Pointcut
 import org.objectweb.asm.Type
+import org.objectweb.asm.tree.MethodInsnNode
+import org.objectweb.asm.tree.MethodNode
 
 /*
  * 定义常量
@@ -40,3 +42,6 @@ const val ASPECT_CLASS_INSTANCE = "INSTANCE"
 
 /** 代理方法的前缀 */
 const val PREFIX_PROXY_METHOD = "bcu_proxy_"
+
+internal inline val MethodNode.isConstructor get() = name == "<init>"
+internal inline val MethodInsnNode.isConstructor get() = name == "<init>"
