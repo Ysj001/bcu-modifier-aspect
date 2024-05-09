@@ -20,6 +20,32 @@ object AspectDemo {
     private const val TAG = "AspectDemo"
 
     /**
+     * [Test] ```<init>```
+     */
+    @Pointcut(
+        target = "class:com/ysj/demo/aspect/Test",
+        funName = "<init>",
+        position = POSITION_CALL,
+    )
+    fun testInit(cp: CallingPoint): Test {
+        Log.i(TAG, "testInit.")
+        return cp.call() as Test
+    }
+
+    /**
+     * [TJ.aaaa]
+     */
+    @Pointcut(
+        target = "class:com/ysj/demo/aspect/TJ",
+        funName = "aaaa",
+        position = POSITION_CALL,
+    )
+    fun testStatic(cp: CallingPoint) {
+        Log.i(TAG, "testStatic.")
+        cp.call()
+    }
+
+    /**
      * [MainActivity.test1]
      */
     @Pointcut(
@@ -86,6 +112,22 @@ object AspectDemo {
         // 演示返回自定义的值
         val result = cp.call() as Int
         return result + 1
+    }
+
+
+    /**
+     * [MainActivity.test4]
+     */
+    @Pointcut(
+        target = "class:.*/MainActivity",
+        funName = "test4",
+        funDesc = "\\(\\[Ljava/lang/String;\\)V",
+        position = POSITION_CALL,
+    )
+    fun test4(cp: CallingPoint) {
+        val varArgs = cp.args.first() as Array<*>
+        Log.i(TAG, "test4: ${varArgs.contentToString()}")
+        cp.call()
     }
 
 }

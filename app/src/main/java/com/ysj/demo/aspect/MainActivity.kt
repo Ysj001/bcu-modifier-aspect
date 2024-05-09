@@ -36,10 +36,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onAopDemoClicked() {
+        TJ.aaaa()
+
+        Test().test()
+        Test(1).test()
+        Test(2, "3").test()
+
         test1()
         test2(12)
         test2("hello world")
         Log.i(TAG, "onAopDemoClicked: ${test3(1, 2)}")
+        test4("1", "2")
     }
 
     private fun test1() {
@@ -57,6 +64,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun test3(a: Int, b: Int): Int {
         return a + b
+    }
+
+    private fun test4(vararg str: String) {
+        Log.i(TAG, "test4: ${str.contentToString()}")
     }
 
 }
