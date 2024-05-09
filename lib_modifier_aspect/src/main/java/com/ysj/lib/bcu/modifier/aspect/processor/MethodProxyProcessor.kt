@@ -1,10 +1,12 @@
 package com.ysj.lib.bcu.modifier.aspect.processor
 
+import com.ysj.lib.bcu.modifier.aspect.PREFIX_PROXY_METHOD
 import com.ysj.lib.bcu.modifier.aspect.PointcutBean
 import com.ysj.lib.bcu.modifier.aspect.api.JoinPoint
 import com.ysj.lib.bcu.modifier.aspect.api.POSITION_CALL
 import com.ysj.lib.bcu.modifier.aspect.callingPointDesc
 import com.ysj.lib.bcu.modifier.aspect.callingPointInternalName
+import com.ysj.lib.bcu.modifier.aspect.isConstructor
 import com.ysj.lib.bcu.modifier.aspect.joinPointDesc
 import com.ysj.lib.bytecodeutil.plugin.api.BCUKeep
 import com.ysj.lib.bytecodeutil.plugin.api.CLASS_TYPE
@@ -48,6 +50,8 @@ class MethodProxyProcessor(
     // 记录代理替换的节点。key：代理的节点 value：源节点
     private val recordProxyNode = ConcurrentHashMap<MethodInsnNode, MethodInsnNode>()
 
+    private val arrayType = Type.getType(Array::class.java)
+    private val anyType = Type.getType(Any::class.java)
     private val bcuKeepDesc = Type.getType(BCUKeep::class.java).descriptor
 
     fun process(pointcutBean: PointcutBean, classNode: ClassNode, methodNode: MethodNode) {
@@ -64,6 +68,24 @@ class MethodProxyProcessor(
                     && Pattern.matches(it.funName, realNode.name)
                     && Pattern.matches(it.funDesc, realNode.desc)
             } ?: return@node
+            if (node.isConstructor) {
+                if (methodNode.isConstructor && node.owner == classNode.name) {
+                    // 不去代理构造方法中自己调用的 this()
+                    return@node
+                }
+                // 构造方法需要移除 NEW 和 DUP 指令
+                var preNode = node.previous
+                while (preNode != null) {
+                    if (preNode.opcode == Opcodes.NEW
+                        && preNode is TypeInsnNode
+                        && preNode.desc == node.owner) {
+                        insnList.remove(preNode.next)
+                        insnList.remove(preNode)
+                        break
+                    }
+                    preNode = preNode.previous
+                }
+            }
             // 切面方法的参数
             val aspectFunArgs = pointcutBean.aspectFunArgs
             val hasJoinPoint = aspectFunArgs.indexOfFirst { it.className == JoinPoint::class.java.name } >= 0
@@ -115,7 +137,8 @@ class MethodProxyProcessor(
      * 在指定类中生成代理方法
      * ```
      * static {returnType} {proxyMethodName}(caller, ...args, JoinPoint) {
-     *     CallingPoint callingPoint = CallingPoint.newInstance(caller, isStatic, funName, new Class[]{...argTypes}, new Object[]{...args});
+     *     Class[] argTypes = new Class[]{...argTypes};
+     *     CallingPoint callingPoint = CallingPoint.newInstance(caller, isStatic, funName, argTypes, new Object[]{...args});
      *     {returnType} result = ({returnType}){AspectClass}.instance.{aspectFun}(JoinPoint, callingPoint);
      *     callingPoint.orgCallingPoint = CallingPoint.newInstance(orgCallingPointParams);
      *     callingPoint.release();
@@ -131,7 +154,7 @@ class MethodProxyProcessor(
             for (i in methods.lastIndex downTo 0) {
                 val method = methods[i]
                 // 代理方法都有前缀，没有前缀说明没生成过直接 break
-                if (!method.name.startsWith(com.ysj.lib.bcu.modifier.aspect.PREFIX_PROXY_METHOD)) break
+                if (!method.name.startsWith(PREFIX_PROXY_METHOD)) break
                 if (method.name.endsWith(proxyName)) {
                     find = method
                     break
@@ -140,30 +163,48 @@ class MethodProxyProcessor(
             if (find != null) return find
         }
         val callerType = Type.getObjectType(calling.owner)
-        val callerDesc = if (calling.isStatic) "" else callerType.descriptor
+        val callerDesc = when {
+            calling.isStatic -> ""
+            calling.isConstructor -> ""
+            else -> callerType.descriptor
+        }
         val args = Type.getArgumentTypes(calling.desc)
         val argsDesc = args.map { it.descriptor }.toTypedArray().contentToString().run {
             substring(1 until lastIndex).replace(", ", "")
         }
-        val returnType = Type.getReturnType(calling.desc)
+        val returnType = when {
+            calling.isConstructor -> callerType
+            else -> Type.getReturnType(calling.desc)
+        }
         val joinPointDesc = if (hasJoinPoint) joinPointDesc else ""
         val method = MethodNode(
             Opcodes.ACC_PUBLIC or Opcodes.ACC_STATIC or Opcodes.ACC_SYNTHETIC,
-            "${com.ysj.lib.bcu.modifier.aspect.PREFIX_PROXY_METHOD}$proxyName",
+            "$PREFIX_PROXY_METHOD$proxyName",
             "($callerDesc$argsDesc$joinPointDesc)${returnType.descriptor}",
             null,
             null
         )
         method.instructions.apply {
-            // caller, ...args 的下一个参数的索引
-            val argsNextIndex = args.size + if (calling.isStatic) 0 else 1
+            val callerStoreIndex = when {
+                calling.isStatic -> -1
+                calling.isConstructor -> -1
+                else -> 0
+            }
+            val argsLastStoreIndex = callerStoreIndex + args.size
+            val argTypesStoreIndex = argsLastStoreIndex + if (hasJoinPoint) 2 else 1
+            // Class[] argTypes = new Class[]{...argTypes}
+            add(args.arrayWrap(CLASS_TYPE) {
+                add(it.classInsnNode)
+            })
+            add(VarInsnNode(Opcodes.ASTORE, argTypesStoreIndex))
             // CallingPoint callingPoint = CallingPoint.newInstance(xxx);
-            createCallingPoint(calling, callerType, args)
-            add(VarInsnNode(Opcodes.ASTORE, argsNextIndex + 1))
+            val callingPointStoreIndex = argTypesStoreIndex + 1
+            createCallingPoint(calling, callerType, args, argTypesStoreIndex)
+            add(VarInsnNode(Opcodes.ASTORE, callingPointStoreIndex))
             // callingPoint.orgCallingPoint = CallingPoint.newInstance(orgCallingPointParams);
             recordProxyNode[calling]?.also {
-                add(VarInsnNode(Opcodes.ALOAD, argsNextIndex + 1))
-                createCallingPoint(it, Type.getObjectType(it.owner), args.sliceArray(1..args.lastIndex))
+                add(VarInsnNode(Opcodes.ALOAD, callingPointStoreIndex))
+                createCallingPoint(it, Type.getObjectType(it.owner), args.sliceArray(1..args.lastIndex), argTypesStoreIndex)
                 add(FieldInsnNode(
                     Opcodes.PUTFIELD,
                     callingPointInternalName,
@@ -179,9 +220,13 @@ class MethodProxyProcessor(
                 Type.getObjectType(pointcut.aspectClassName).descriptor
             ))
             // joinPoint
-            if (hasJoinPoint) add(VarInsnNode(Opcodes.ALOAD, argsNextIndex))
+            if (hasJoinPoint) {
+                add(VarInsnNode(Opcodes.ALOAD, argsLastStoreIndex + 1))
+            }
             // callingPoint
-            add(VarInsnNode(Opcodes.ALOAD, argsNextIndex + 1))
+            add(VarInsnNode(Opcodes.ALOAD, callingPointStoreIndex))
+            val returnIndex = callingPointStoreIndex + 1
+            // {aspectFun}(JoinPoint, callingPoint)
             add(MethodInsnNode(
                 Opcodes.INVOKEVIRTUAL,
                 pointcut.aspectClassName,
@@ -191,10 +236,10 @@ class MethodProxyProcessor(
             ))
             add(cast(Type.getReturnType(pointcut.aspectFunDesc), returnType))
             if (returnType.sort != Type.METHOD && returnType.sort != Type.VOID) {
-                add(VarInsnNode(returnType.getOpcode(Opcodes.ISTORE), argsNextIndex + 2))
+                add(VarInsnNode(returnType.getOpcode(Opcodes.ISTORE), returnIndex))
             }
             // callingPoint.release()
-            add(VarInsnNode(Opcodes.ALOAD, argsNextIndex + 1))
+            add(VarInsnNode(Opcodes.ALOAD, callingPointStoreIndex))
             add(MethodInsnNode(
                 Opcodes.INVOKEVIRTUAL,
                 callingPointInternalName,
@@ -203,7 +248,7 @@ class MethodProxyProcessor(
                 false
             ))
             if (returnType.sort != Type.METHOD && returnType.sort != Type.VOID) {
-                add(VarInsnNode(returnType.getOpcode(Opcodes.ILOAD), argsNextIndex + 2))
+                add(VarInsnNode(returnType.getOpcode(Opcodes.ILOAD), returnIndex))
             }
             add(InsnNode(returnType.getOpcode(Opcodes.IRETURN)))
         }
@@ -214,17 +259,66 @@ class MethodProxyProcessor(
         return method
     }
 
-    private fun InsnList.createCallingPoint(calling: MethodInsnNode, callerType: Type, args: Array<Type>) {
+    private fun InsnList.createCallingPoint(calling: MethodInsnNode, callerType: Type, args: Array<Type>, argTypesIndex: Int) {
         // caller
-        add(if (!calling.isStatic) VarInsnNode(Opcodes.ALOAD, 0) else callerType.classInsnNode)
+        when {
+            calling.isStatic -> add(callerType.classInsnNode)
+            calling.isConstructor -> {
+                add(callerType.classInsnNode)
+                add(VarInsnNode(Opcodes.ALOAD, argTypesIndex))
+                add(MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL,
+                    "java/lang/Class",
+                    "getConstructor",
+                    "([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+                    false
+                ))
+            }
+            else -> add(VarInsnNode(Opcodes.ALOAD, 0))
+        }
         // isStatic
         add(InsnNode(if (calling.isStatic) Opcodes.ICONST_1 else Opcodes.ICONST_0))
         // funName
-        add(LdcInsnNode(calling.name))
-        // new Class[]{...argTypes}
-        add(args.argTypesArray())
-        // new Object[]{...args}
-        add(args.argsArray(if (calling.isStatic) 0 else 1))
+        add(LdcInsnNode(if (calling.isConstructor) "newInstance" else calling.name))
+        if (calling.isConstructor) {
+            // argTypes
+            add(arrayOf(arrayType).arrayWrap(CLASS_TYPE) {
+                add(it.classInsnNode)
+            })
+            // new Object[]{new Object[]{...args}}
+            var startLoadIndex = when {
+                calling.isStatic -> 0
+                calling.isConstructor -> 0
+                else -> 1
+            }
+            add(arrayOf(arrayType).arrayWrap(anyType) { _ ->
+                add(args.arrayWrap(anyType) { t2 ->
+                    add(VarInsnNode(t2.opcodeLoad(), startLoadIndex))
+                    // 计算当前参数的索引
+                    startLoadIndex += t2.size
+                    if (t2.needWrap()) {
+                        add(t2.wrapNode())
+                    }
+                })
+            })
+        } else {
+            // argTypes
+            add(VarInsnNode(Opcodes.ALOAD, argTypesIndex))
+            // new Object[]{...args}
+            var startLoadIndex = when {
+                calling.isStatic -> 0
+                calling.isConstructor -> 0
+                else -> 1
+            }
+            add(args.arrayWrap(anyType) {
+                // 计算当前参数的索引
+                add(VarInsnNode(it.opcodeLoad(), startLoadIndex))
+                startLoadIndex += it.size
+                if (it.needWrap()) {
+                    add(it.wrapNode())
+                }
+            })
+        }
         add(MethodInsnNode(
             Opcodes.INVOKESTATIC,
             callingPointInternalName,
@@ -234,40 +328,32 @@ class MethodProxyProcessor(
         ))
     }
 
-    private fun Array<Type>.argTypesArray() = InsnList().also { list ->
+    private fun Array<Type>.arrayWrap(arrType: Type, block: InsnList.(Type) -> Unit) = InsnList().also { list ->
         list.add(IntInsnNode(Opcodes.BIPUSH, size))
-        list.add(TypeInsnNode(Opcodes.ANEWARRAY, CLASS_TYPE.internalName))
-        forEachIndexed { i, t ->
+        list.add(TypeInsnNode(Opcodes.ANEWARRAY, arrType.internalName))
+        for (index in indices) {
+            val type = get(index)
             list.add(InsnNode(Opcodes.DUP))
-            list.add(IntInsnNode(Opcodes.BIPUSH, i))
-            list.add(t.classInsnNode)
+            list.add(IntInsnNode(Opcodes.BIPUSH, index))
+            list.block(type)
             list.add(InsnNode(Opcodes.AASTORE))
         }
     }
 
-    private fun Array<Type>.argsArray(startLocalVarIndex: Int) = InsnList().also { list ->
-        var localVarIndex = startLocalVarIndex
-        list.add(IntInsnNode(Opcodes.BIPUSH, size))
-        list.add(TypeInsnNode(Opcodes.ANEWARRAY, Type.getType(Any::class.java).internalName))
-        forEachIndexed { i, t ->
-            list.add(InsnNode(Opcodes.DUP))
-            list.add(IntInsnNode(Opcodes.BIPUSH, i))
-            list.add(VarInsnNode(t.opcodeLoad(), localVarIndex))
-            if (t.sort in Type.BOOLEAN..Type.DOUBLE) {
-                // primitive types must be boxed
-                val wrapperType = t.wrapperType
-                list.add(MethodInsnNode(
-                    Opcodes.INVOKESTATIC,
-                    wrapperType.internalName,
-                    "valueOf",
-                    "(${t.descriptor})${wrapperType.descriptor}",
-                    false
-                ))
-            }
-            list.add(InsnNode(Opcodes.AASTORE))
-            // 计算当前参数的索引
-            localVarIndex += t.size
-        }
+    private fun Type.needWrap(): Boolean {
+        return sort in Type.BOOLEAN..Type.DOUBLE
+    }
+
+    private fun Type.wrapNode(): MethodInsnNode {
+        // primitive types must be boxed
+        val wrapperType = wrapperType
+        return MethodInsnNode(
+            Opcodes.INVOKESTATIC,
+            wrapperType.internalName,
+            "valueOf",
+            "(${descriptor})${wrapperType.descriptor}",
+            false
+        )
     }
 
     private fun isAnnotationTarget(pointcutBean: PointcutBean, node: MethodInsnNode): Boolean {
